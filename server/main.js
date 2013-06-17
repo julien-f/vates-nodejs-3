@@ -54,35 +54,7 @@ Response.prototype.sendError = function (code, message)
 
 var response = new Response(function (data) { socket.emit(data); }, 3);
 
-//////////////////////////////////////////////////////////////////////
-
-
-// function (session, req, res) {
-
-// 	// Session object.
-// 	// I need to store session-related variables.
-// 	session.set('toto', value);
-// 	session.get('toto', 'default');
-
-// 	// Request object.
-// 	req.method = 'session.signInWithPassword';
-// 	req.params = {user: 'chris.allard', password: '123'};
-
-// 	// Response object.
-// 	res.sendResult(true);
-// 	res.sendError(code, message);
-// }
-
-
 ///////////////////////////////////////
-
-function user(name, password, permission, id)
-{
-	this.name = name;
-	this.password = password;
-	this.permission = permission;
-	this.id = id;
-}
 
 var users = {
 	'0': {
@@ -91,37 +63,34 @@ var users = {
 	},
 };
 
-var session = {
-	// 'id': {
-	// 	'user': null,
-	// },
-};
-
 ///////////////////////////////////////
 
 var api = {};
 
 api.session = {
-	'signInWithPassword': function (params, res)
+	'signInWithPassword': function (session, req, res)
 	{
-		if (users.indexOf(data.params[0]) != -1) // L'utilisateur existe bien
+		var p_user = req.params.user;
+		var p_pass = req.params.password;
+
+		if (!p_user || !p_pass)
 		{
-			if (users[password] === data.params[1]) // Il y a le bon mot de passe
-			{
-				res.sendError(code, message);
-
-				res.sendResult(true);
-
-
-				socket.emit(
-					JSON.stringify( {
-						'jsonrpc': '2.0',
-						'result' : true,
-						'id': params[2],
-					});
-				);
-			}
+			res.sendError(-32602, 'invalid params');
+			return;
 		}
+
+		var user = _.findWhere(users, {'name': p_user});
+		if (!user)
+		{
+			// @todo Nonexistent user: returns an error.
+			return;
+		}
+
+		// @todo
+		// If check password:
+		//   register session
+		// else
+		//   return an error.
 	},
 };
 
@@ -129,9 +98,16 @@ api.session = {
 
 io.socket.on('connexion', function (socket) {
 	sockect.on('message', function (message) {
+
+		// @todo Handle invalid JSON.
 		message = JSON.parse(message.toString());
 
-		var session = _; // @todo;
+		// @tooo Handle invalid JSON-RPC.
+
+		// @todo Where should we create the session object which have
+		// to exist during the whole connection?
+		var session = new Session();
+
 		var req = {
 			'method': message.method,
 			'params': message.params
@@ -142,6 +118,9 @@ io.socket.on('connexion', function (socket) {
 			},
 			message.id
 		);
+
+		// @todo Put the resolving algorithm in a function which
+		// returns the function if found, “undefined” otherwise.
 
 		var parts = message.method.split('.');
 
