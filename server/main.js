@@ -2,15 +2,13 @@
 
 var io = require('socket.io').listen(8080);
 
-// @todo Useless for the server because we are not sending requests,
-// only responses.
-var json_rpc_id = 0; // Variable pour l'ID des requètes en JSONRPC
-
 //////////////////////////////////////////////////////////////////////
 
-// @todo Why is it not a method of Array.prototype?
-function arrayUnset(array, value){
-    array.splice(array.indexOf(value), 1);
+Array.prototype.unset = function(val){
+	var index = this.indexOf(val)
+	if(index > -1){
+		this.splice(index,1)
+	}
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -22,16 +20,16 @@ function Session()
 
 Session.prototype.set = function (name, value) {
 	this.data[name] = value;
-}
+};
 
-Session.prototype.get = function (name, default) {
+Session.prototype.get = function (name, def) {
 	if (this.data[name])
 	{
 		return this.data[name];
 	}
 
-	return default; // @todo Check it works.
-}
+	return def;
+};
 
 //////////////////////////////////////////////////////////////////////
 
@@ -48,7 +46,7 @@ Response.prototype.sendResult = function (value)
 		'result': value,
 		'id': this.id,
 	}));
-}
+};
 
 Response.prototype.sendError = function (code, message)
 {
@@ -60,11 +58,7 @@ Response.prototype.sendError = function (code, message)
 		},
 		'id': this.id,
 	}));
-}
-
-// @todo A response is bound to a connection (“socket”), it should not
-// be declared as a global variable!
-var response = new Response(function (data) { socket.emit(data); }, 3);
+};
 
 ///////////////////////////////////////
 
@@ -147,8 +141,9 @@ api.session = {
 			return;
 		}
 
-		// @todo We want to return the whole user, not just its id.
-		res.sendResult(session.get('user_id'));
+		var user = _.findWhere(users, {'id': session.get('user_id')});
+
+		res.sendResult(session.get(user);
 	},
 
 	///////////////////////////////////////
@@ -158,16 +153,13 @@ api.session = {
 	{
 		var p_token = req.params.token;
 
-		// @todo Check we have the “token” parameter.
+		if (!p_token)
+		// Verifie si l'email et le mot de passe n'existe pas.
+		{
+			res.sendError(-32602, 'invalid params');
+			return;
+		}
 
-		// @todo “elem” is not very meaningful, why not “token”?
-		var elem = _.findWhere(tokens, {'token': p_token});
-
-		// @todo “p_email” is not defined, what is it?
-		var user = _.findWhere(users, {'email': p_email});
-
-		// @todo For performance concerns we should check that before
-		// searching for the token.
 		if (session.get('user_id') !== undefined)
 		// Verifie si l'utilisateur n'est pas déjà enregistré.
 		{
@@ -175,17 +167,15 @@ api.session = {
 			return;
 		}
 
-		// @todo Try to keep related operations close in the code
-		// (e.g. searching for the token and checking whether it was
-		// found).
-		if (!elem)
+		var token = _.findWhere(tokens, {'token': p_token});
+		if (!token)
 		{
 			res.sendError(1, 'invalid token');
 			return;
 		}
 
 		// L'utilisateur peut s'identifier on retourne True.
-		session.set('user_id', user.id);
+		session.set('user_id', token.id);
 		res.sendResult(true);
 	},
 
@@ -194,16 +184,7 @@ api.session = {
 	'createToken': function (session, res)
 	// Creates a token wich may be used to authenticate the user without its password during one week.
 	{
-
-		// @todo The prefix “p_” stands for “parameter” which
-		// “p_token” is not.
-		//
-		// You should not do useless actions, therefore check all the
-		// conditions are reunited before generating the token.
-		var p_token = random();
-
-		// @todo Idem.
-		var p_user = session.get('user_id');
+		var user = session.get('user_id');
 
 		if (session.get('user_id') === undefined)
 		// Vérifie si l'utilisateur n'est pas déjà enregistré.
@@ -212,14 +193,16 @@ api.session = {
 			return;
 		}
 
+		var token = random();
+
 		tokens.push(
 			{
-				'token': p_token,
-				'id': p_user,
+				'token': token,
+				'id': user,
 			}
 		);
 
-		res.sendResult(p_token);
+		res.sendResult(token);
 	},
 
 	///////////////////////////////////////
@@ -237,7 +220,7 @@ api.session = {
 			return;
 		}
 
-		arrayUnset(tokens, elem);
+		tokens.unset(elem);
 		res.sendResult(true);
 	},
 
@@ -245,11 +228,10 @@ api.session = {
 
 ///////////////////////////////////////
 
-// @todo The name is not really meaningful, why not “api_resolve”?
-function currentFunction(message)
+function api_resolve(name)
 // Verifie si la fonction appelé existe et retourne cette fonction ou retourne undefined.
 {
-	var parts = message.method.split('.');
+	var parts = name.split('.');
 
 	var current = api;
 
@@ -278,8 +260,7 @@ io.sockets.on('connexion', function (socket) {
 	var session = new Session();
 
 	var transport = function (data) {
-		// @todo You should use “socket.send()”.
-		socket.emit(data);
+		socket.send(data);
 	};
 
 	sockect.on('message', function (message) {
@@ -306,7 +287,7 @@ io.sockets.on('connexion', function (socket) {
 		};
 		var res = new Response(transport, message.id);
 
-		var current = currentFunction(message);
+		var current = api_resolve(message.method);
 
 		if (!current)
 		{
