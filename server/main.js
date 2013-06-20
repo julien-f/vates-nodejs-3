@@ -134,16 +134,18 @@ api.session = {
 	'getUser': function (session, res)
 	// Returns the authenticated user for this session.
 	{
-		if (session.get('user_id') === undefined)
+		var user_id = session.get('user_id');
+
+		if (user_id === undefined)
 		// Verifie si l'utilisateur n'est pas déjà enregistré.
 		{
 			res.sendError(0, 'not authenticated');
 			return;
 		}
 
-		var user = _.findWhere(users, {'id': session.get('user_id')});
+		var user = _.findWhere(users, {'id': user_id});
 
-		res.sendResult(session.get(user);
+		res.sendResult(user);
 	},
 
 	///////////////////////////////////////
@@ -154,7 +156,7 @@ api.session = {
 		var p_token = req.params.token;
 
 		if (!p_token)
-		// Verifie si l'email et le mot de passe n'existe pas.
+		// Verifie le token donné en paramètre n'existe pas.
 		{
 			res.sendError(-32602, 'invalid params');
 			return;
@@ -184,9 +186,9 @@ api.session = {
 	'createToken': function (session, res)
 	// Creates a token wich may be used to authenticate the user without its password during one week.
 	{
-		var user = session.get('user_id');
+		var user_id = session.get('user_id');
 
-		if (session.get('user_id') === undefined)
+		if (user_id === undefined)
 		// Vérifie si l'utilisateur n'est pas déjà enregistré.
 		{
 			res.sendError(0, 'not authenticated');
@@ -198,7 +200,7 @@ api.session = {
 		tokens.push(
 			{
 				'token': token,
-				'id': user,
+				'id': user_id,
 			}
 		);
 
