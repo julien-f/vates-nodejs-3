@@ -275,12 +275,14 @@ io.sockets.on('connexion', function (socket) {
 		catch (exception)
 		{
 			new Response(transport, null).sendError(-32700,'invalid JSON was received');
+			return;
 		}
 
 		// Test si l'on reçoit pas du JSON-RPC.
 		if (message.jsonrpc !== '2.0' || !message.method || !message.params || !message.id)
 		{
 			new Response(transport, null).sendError(-32603, 'internal JSON-RPC error');
+			return;
 		}
 
 		var req = {
