@@ -278,7 +278,7 @@ io.sockets.on('connexion', function (socket) {
 		}
 
 		// Test si l'on reçoit pas du JSON-RPC.
-		if (!message.jsonrpc === '2.0' || !message.method || !message.params || !message.id)
+		if (message.jsonrpc !== '2.0' || !message.method || !message.params || !message.id)
 		{
 			new Response(transport, null).sendError(-32603, 'internal JSON-RPC error');
 		}
