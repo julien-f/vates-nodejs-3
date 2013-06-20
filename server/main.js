@@ -131,6 +131,7 @@ api.session = {
 
 	///////////////////////////////////////
 
+	// @todo Missing req parameter.
 	'getUser': function (session, res)
 	// Returns the authenticated user for this session.
 	{
@@ -183,6 +184,7 @@ api.session = {
 
 	///////////////////////////////////////
 
+	// @todo Missing “req” parameter.
 	'createToken': function (session, res)
 	// Creates a token wich may be used to authenticate the user without its password during one week.
 	{
@@ -281,6 +283,8 @@ io.sockets.on('connexion', function (socket) {
 		// Test si l'on reçoit pas du JSON-RPC.
 		if (message.jsonrpc !== '2.0' || !message.method || !message.params || !message.id)
 		{
+			// @todo incorrect error, it should be “the JSON sent is
+			// not a valid request object”.
 			new Response(transport, null).sendError(-32603, 'internal JSON-RPC error');
 			return;
 		}
