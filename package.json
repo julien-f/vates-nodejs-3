@@ -1,0 +1,9 @@
+{
+  "name": "vates-nodejs-3",
+  "version": "0.1.0",
+
+  "dependencies": {
+    "underscore": ">=1.4.4",
+    "socket.io": "0.9.16"
+  }
+}
