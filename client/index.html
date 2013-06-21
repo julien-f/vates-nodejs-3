@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<title>Titre</title>
+</head>
+<body>
+	<script type="text/javascript" src="http://localhost:8080/socket.io/socket.io.js"></script>
+	<script>
+		var json_id = 0;
+
+		var socket = io.connect('http://localhost:8080');
+
+		socket.on('connect', function () {
+			window.json = function (method, params) {
+				socket.send(JSON.stringify({
+					'jsonrpc': '2.0',
+					'method': method,
+					'params': params || [],
+					'id': json_id++,
+				}));
+			};
+
+			console.log('connected, ready to make some request');
+
+			socket.on('message', function (data) {
+				console.log(data);
+			});
+		});
+
+		socket.on('disconnect', function () {
+			delete window.json;
+
+			console.log('disconnected, cannot make any requests');
+		});
+	</script>
+</body>
+</html>

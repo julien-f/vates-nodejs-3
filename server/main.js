@@ -229,9 +229,12 @@ api.session = {
 	// Destroys the given token, it may no longer be used to open a session.
 	{
 		var p_token = req.params.token;
+
+		// @todo As usual, do not do anything (especially costly
+		// searches) before checking parameters.
 		var elem	= _.findWhere(tokens, {'token': p_token});
 
-		if (!p_token ||  !elem)
+		if (!p_token || !elem)
 		// Si le token donné n'est pas valide ou qu'il n'existe pas dans la base du serveur.
 		{
 			res.sendError(0, 'invalid token');
