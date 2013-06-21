@@ -3,6 +3,7 @@
 var io = require('socket.io').listen(8080);
 var _ = require('underscore');
 var crypto = require ('crypto');
+var hashy = require ('hashy');
 
 io.set('log level', 0);
 
@@ -72,7 +73,7 @@ var users = [
 	{
 		'id': 0,
 		'email': 'dupont@gmail.com',
-		'password': '123'
+		'password': '$2a$10$PsSOXflmnNMEOd0I5ohJQ.cLty0R29koYydD0FBKO9Rb7.jvCelZq'
 	},
 ];
 
@@ -117,17 +118,31 @@ api.session = {
 			return;
 		}
 
-		if (p_pass !== user.password)
-		// Verifie si l'utilisteur à le bon mot de passe.
-		{
-			res.sendError(1, 'invalid credential');
-			return;
-		}
+		hashy.verify(p_pass, user.password)
+			.then(function (success) {
+				if (!success)
+				{
+					res.sendError(1, 'invalid credential')
+					return;
+				}
 
-		// L'utilisateur peut s'identifier on retourne True.
-		session.set('user_id', user.id);
+				// L'utilisateur peut s'identifier on retourne True.
+				session.set('user_id', user.id);
+				res.sendResult(true);
 
-		res.sendResult(true);
+				console.log('the password has been checked, you are now authenticated!');
+
+				// Now we can check if the hash should be recomputed, i.e. if it
+				// fits the current security policies (algorithm & options).
+				if (hashy.needsRehash(user.password))
+				{
+					return hashy.hash(p_pass).then(function (new_hash) {
+						user.password = new_hash;
+						console.log('the hash has been updated:', user.password);
+					});
+				}
+			})
+			.done();
 	},
 
 	///////////////////////////////////////
