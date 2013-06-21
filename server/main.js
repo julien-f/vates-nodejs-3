@@ -1,6 +1,10 @@
 #!/usr/bin/nodejs
 
 var io = require('socket.io').listen(8080);
+var _ = require('underscore');
+var crypto = require ('crypto');
+
+io.set('log level', 0);
 
 //////////////////////////////////////////////////////////////////////
 
@@ -23,7 +27,7 @@ Session.prototype.set = function (name, value) {
 };
 
 Session.prototype.get = function (name, def) {
-	if (this.data[name])
+	if (undefined !== this.data[name])
 	{
 		return this.data[name];
 	}
@@ -75,10 +79,6 @@ var users = [
 
 ///////////////////////////////////////
 
-var random = function() {
-    return (Math.random().toString(36).substr(2) + Math.random().toString(36).substr(2));
-};
-
 var tokens = [];
 
 ///////////////////////////////////////
@@ -94,7 +94,6 @@ api.session = {
 	{
 		var p_email = req.params.email;
 		var p_pass = req.params.password;
-		var user = _.findWhere(users, {'email': p_email});
 
 		if (!p_email || !p_pass)
 		// Verifie si l'email et le mot de passe n'existe pas.
@@ -110,6 +109,7 @@ api.session = {
 			return;
 		}
 
+		var user = _.findWhere(users, {'email': p_email});
 		if (!user)
 		// verifie si l'utilisateur existe dans la base du serveur.
 		{
@@ -117,7 +117,7 @@ api.session = {
 			return;
 		}
 
-		if (p_pass !== users.password)
+		if (p_pass !== user.password)
 		// Verifie si l'utilisteur à le bon mot de passe.
 		{
 			res.sendError(1, 'invalid credential');
@@ -126,13 +126,13 @@ api.session = {
 
 		// L'utilisateur peut s'identifier on retourne True.
 		session.set('user_id', user.id);
+
 		res.sendResult(true);
 	},
 
 	///////////////////////////////////////
 
-	// @todo Missing req parameter.
-	'getUser': function (session, res)
+	'getUser': function (session, req, res)
 	// Returns the authenticated user for this session.
 	{
 		var user_id = session.get('user_id');
@@ -146,7 +146,7 @@ api.session = {
 
 		var user = _.findWhere(users, {'id': user_id});
 
-		res.sendResult(user);
+		res.sendResult(_.omit(user, 'password'));
 	},
 
 	///////////////////////////////////////
@@ -184,8 +184,7 @@ api.session = {
 
 	///////////////////////////////////////
 
-	// @todo Missing “req” parameter.
-	'createToken': function (session, res)
+	'createToken': function (session, req, res)
 	// Creates a token wich may be used to authenticate the user without its password during one week.
 	{
 		var user_id = session.get('user_id');
@@ -197,7 +196,7 @@ api.session = {
 			return;
 		}
 
-		var token = random();
+		var token =	crypto.randomBytes(32).toString('base64');
 
 		tokens.push(
 			{
@@ -259,16 +258,17 @@ function api_resolve(name)
 
 ///////////////////////////////////////
 
-io.sockets.on('connexion', function (socket) {
+io.sockets.on('connection', function (socket) {
 
 	var session = new Session();
 
 	var transport = function (data) {
+		console.log(data);
 		socket.send(data);
 	};
 
-	sockect.on('message', function (message) {
-
+	socket.on('message', function (message) {
+		console.log(message);
 		// Test si l'on reçoit du JSON.
 		try
 		{
@@ -281,11 +281,9 @@ io.sockets.on('connexion', function (socket) {
 		}
 
 		// Test si l'on reçoit pas du JSON-RPC.
-		if (message.jsonrpc !== '2.0' || !message.method || !message.params || !message.id)
+		if (message.jsonrpc !== '2.0' || !message.method || !message.params || message.id === undefined)
 		{
-			// @todo incorrect error, it should be “the JSON sent is
-			// not a valid request object”.
-			new Response(transport, null).sendError(-32603, 'internal JSON-RPC error');
+			new Response(transport, null).sendError(-32600, 'The JSON sent is not a valid request object');
 			return;
 		}
 
@@ -296,7 +294,7 @@ io.sockets.on('connexion', function (socket) {
 		var res = new Response(transport, message.id);
 
 		var current = api_resolve(message.method);
-
+		console.log(current);
 		if (!current)
 		{
 			// Si la fonction appelé n'existe pas.
