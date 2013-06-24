@@ -18,6 +18,120 @@ Array.prototype.unset = function(val){
 
 //////////////////////////////////////////////////////////////////////
 
+function Collection()
+{
+	this.data = {};
+	this.eventListeners = {};
+}
+
+Collection.prototype.add = function(obj) {
+	// associe un identifiant à une valeur.
+	/* Exemple :
+	data.0 = {
+			'id': 0,
+			'email': 'dupont@gmail.com',
+			'passowrd': 123,
+			}
+	data.1 = {
+			'id': 1,
+			'email': 'tintin@gmail.com',
+			'passowrd': abc,
+			}
+	*/
+	this.data[obj.id] = obj;
+
+	this.emit('add', obj);
+};
+
+
+Collection.prototype.remove = function(id) {
+	var obj = this.data[id];
+
+	if (undefined === obj)
+	{
+		return false;
+	}
+
+	delete this.data[id];
+
+	this.emit('remove', obj);
+	return true;
+};
+
+Collection.prototype.reset = function () {
+	this.data = {};
+
+	this.emit('reset');
+};
+
+Collection.prototype.get = function (id, def) {
+	if (undefined !== this.data[id])
+	{
+		return this.data[id];
+	}
+
+	return def;
+};
+
+Collection.prototype.findWhere = function (properties) {
+	return _.findWhere(this.data, properties);
+};
+
+Collection.prototype.on = function (event, callback) {
+	/*
+
+	users.on('add', function (user) {
+		console.log('l'utilisateur ' +user ' s'est connecté');
+	});
+
+	eventListeners = {
+		'add' : 'add'
+	}
+
+	*/	
+	if (undefined === this.eventListeners[event])
+	{
+		this.eventListeners[event] = [];
+	}
+
+	this.eventListeners[event].push(callback);
+};
+
+Collection.prototype.emit = function (event) {
+	if (undefined === this.eventListeners[event])
+	{
+		return;
+	}
+
+	var args = Array.prototype.slice.call(arguments, 1);
+	var self = this;
+
+	_.each(this.eventListeners[event], function (val) {
+		val.apply(self, args);
+	});
+};
+
+/*
+Exemple d'utilisation que l'on souhaite
+var users = new Collection();
+users.add({
+	'id': 0,
+	'email': 'dupont@gmail.com',
+	'passowrd': 123,
+});
+users.add({
+	'id': 1,
+	'email': 'dupond@gmail.com',
+	'passowrd': 123,
+});
+*/
+
+f(); // <=> f.call(null) <=> f.apply(null, [])
+o.f(); // <=> o.f.call(o) <=> o.f.apply(o, [])
+
+
+//////////////////////////////////////////////////////////////////////
+
 function Session()
 {
 	this.data = {};
@@ -69,18 +183,18 @@ Response.prototype.sendError = function (code, message)
 
 // @todo Arrays are really basic, maybe we should take a look at
 // [Backbone.collection](http://backbonejs.org/#Collection)?
-var users = [
+var users = new Collection();
+users.add(
 	{
 		'id': 0,
 		'email': 'dupont@gmail.com',
 		'password': '$2a$10$PsSOXflmnNMEOd0I5ohJQ.cLty0R29koYydD0FBKO9Rb7.jvCelZq'
-	},
-];
-
+	}
+);
 
 ///////////////////////////////////////
 
-var tokens = [];
+var tokens = new Collection();
 
 ///////////////////////////////////////
 
@@ -110,7 +224,7 @@ api.session = {
 			return;
 		}
 
-		var user = _.findWhere(users, {'email': p_email});
+		var user = users.findWhere({'email': p_email});
 		if (!user)
 		// verifie si l'utilisateur existe dans la base du serveur.
 		{
@@ -159,7 +273,7 @@ api.session = {
 			return;
 		}
 
-		var user = _.findWhere(users, {'id': user_id});
+		var user = users.get(user_id);
 
 		res.sendResult(_.omit(user, 'password'));
 	},
@@ -185,7 +299,7 @@ api.session = {
 			return;
 		}
 
-		var token = _.findWhere(tokens, {'token': p_token});
+		var token = tokens.get(p_token);
 		if (!token)
 		{
 			res.sendError(1, 'invalid token');
@@ -193,7 +307,7 @@ api.session = {
 		}
 
 		// L'utilisateur peut s'identifier on retourne True.
-		session.set('user_id', token.id);
+		session.set('user_id', token.user_id);
 		res.sendResult(true);
 	},
 
@@ -213,12 +327,10 @@ api.session = {
 
 		var token =	crypto.randomBytes(32).toString('base64');
 
-		tokens.push(
-			{
-				'token': token,
-				'id': user_id,
-			}
-		);
+		tokens.add({
+			'id': token,
+			'user_id': user_id,
+		});
 
 		res.sendResult(token);
 	},
@@ -230,18 +342,13 @@ api.session = {
 	{
 		var p_token = req.params.token;
 
-		// @todo As usual, do not do anything (especially costly
-		// searches) before checking parameters.
-		var elem	= _.findWhere(tokens, {'token': p_token});
-
-		if (!p_token || !elem)
+		if (!tokens.remove(p_token))
 		// Si le token donné n'est pas valide ou qu'il n'existe pas dans la base du serveur.
 		{
 			res.sendError(0, 'invalid token');
 			return;
 		}
 
-		tokens.unset(elem);
 		res.sendResult(true);
 	},
 
