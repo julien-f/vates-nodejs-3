@@ -2,19 +2,10 @@
 
 var io = require('socket.io').listen(8080);
 var _ = require('underscore');
-var crypto = require ('crypto');
-var hashy = require ('hashy');
+var crypto = require('crypto');
+var hashy = require('hashy');
 
 io.set('log level', 0);
-
-//////////////////////////////////////////////////////////////////////
-
-Array.prototype.unset = function(val){
-	var index = this.indexOf(val)
-	if(index > -1){
-		this.splice(index,1)
-	}
-}
 
 //////////////////////////////////////////////////////////////////////
 
@@ -88,7 +79,7 @@ Collection.prototype.on = function (event, callback) {
 		'add' : 'add'
 	}
 
-	*/	
+	*/
 	if (undefined === this.eventListeners[event])
 	{
 		this.eventListeners[event] = [];
@@ -126,10 +117,6 @@ users.add({
 });
 */
 
-f(); // <=> f.call(null) <=> f.apply(null, [])
-o.f(); // <=> o.f.call(o) <=> o.f.apply(o, [])
-
-
 //////////////////////////////////////////////////////////////////////
 
 function Session()
@@ -149,6 +136,8 @@ Session.prototype.get = function (name, def) {
 
 	return def;
 };
+
+// @todo session.has(name) which returns whether this entry exists.
 
 //////////////////////////////////////////////////////////////////////
 
@@ -181,16 +170,12 @@ Response.prototype.sendError = function (code, message)
 
 ///////////////////////////////////////
 
-// @todo Arrays are really basic, maybe we should take a look at
-// [Backbone.collection](http://backbonejs.org/#Collection)?
 var users = new Collection();
-users.add(
-	{
-		'id': 0,
-		'email': 'dupont@gmail.com',
-		'password': '$2a$10$PsSOXflmnNMEOd0I5ohJQ.cLty0R29koYydD0FBKO9Rb7.jvCelZq'
-	}
-);
+users.add({
+	'id': 0,
+	'email': 'dupont@gmail.com',
+	'password': '$2a$10$PsSOXflmnNMEOd0I5ohJQ.cLty0R29koYydD0FBKO9Rb7.jvCelZq'
+});
 
 ///////////////////////////////////////
 
@@ -228,7 +213,7 @@ api.session = {
 		if (!user)
 		// verifie si l'utilisateur existe dans la base du serveur.
 		{
-			res.sendError(1, 'invalid credential')
+			res.sendError(1, 'invalid credential');
 			return;
 		}
 
@@ -325,7 +310,8 @@ api.session = {
 			return;
 		}
 
-		var token =	crypto.randomBytes(32).toString('base64');
+		// @todo Uses the asynchronous version.
+		var token = crypto.randomBytes(32).toString('base64');
 
 		tokens.add({
 			'id': token,
