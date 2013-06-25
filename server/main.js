@@ -141,6 +141,9 @@ Session.prototype.get = function (name, def) {
 
 //////////////////////////////////////////////////////////////////////
 
+// @todo Prints an error if we call sendError() and/or sendResult()
+// more than once.
+
 function Response(transport, id)
 {
 	this.transport = transport;
