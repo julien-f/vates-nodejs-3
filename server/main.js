@@ -4,8 +4,34 @@ var io = require('socket.io').listen(8080);
 var _ = require('underscore');
 var crypto = require('crypto');
 var hashy = require('hashy');
+var events = require('events');
+var util = require("util");
 
 io.set('log level', 0);
+var users_nb_id = 0;
+
+Array.prototype.unset = function(val) {
+	var index = this.indexOf(val)
+	if(index > -1){
+		this.splice(index,1)
+	}
+};
+
+//////////////////////////////////////////////////////////////////////
+
+function isEmail(email)
+{
+	var regEmail = new RegExp('^[0-9a-z._-]+@{1}[0-9a-z.-]{2,}[.]{1}[a-z]{2,5}$','i');
+	return regEmail.test(email);
+}
+
+function isPassword(password)
+{
+	var regPassword = new RegExp('^[0-9a-zA-Z].{5,}$','i');
+	return regPassword.test(password);
+}
+
+var droits = ['none', 'read', 'write', 'admin'];
 
 //////////////////////////////////////////////////////////////////////
 
@@ -16,24 +42,9 @@ function Collection()
 }
 
 Collection.prototype.add = function(obj) {
-	// associe un identifiant à une valeur.
-	/* Exemple :
-	data.0 = {
-			'id': 0,
-			'email': 'dupont@gmail.com',
-			'passowrd': 123,
-			}
-	data.1 = {
-			'id': 1,
-			'email': 'tintin@gmail.com',
-			'passowrd': abc,
-			}
-	*/
 	this.data[obj.id] = obj;
-
 	this.emit('add', obj);
 };
-
 
 Collection.prototype.remove = function(id) {
 	var obj = this.data[id];
@@ -64,22 +75,19 @@ Collection.prototype.get = function (id, def) {
 	return def;
 };
 
+Collection.prototype.set = function (id, params) {
+	for (var parameter in params)
+	{
+		this.data[id][parameter] = params[parameter];
+	}
+
+};
+
 Collection.prototype.findWhere = function (properties) {
 	return _.findWhere(this.data, properties);
 };
 
 Collection.prototype.on = function (event, callback) {
-	/*
-
-	users.on('add', function (user) {
-		console.log('l'utilisateur ' +user ' s'est connecté');
-	});
-
-	eventListeners = {
-		'add' : 'add'
-	}
-
-	*/
 	if (undefined === this.eventListeners[event])
 	{
 		this.eventListeners[event] = [];
@@ -87,6 +95,28 @@ Collection.prototype.on = function (event, callback) {
 
 	this.eventListeners[event].push(callback);
 };
+
+Collection.prototype.off = function (event, callback) {
+	if (undefined === this.eventListeners[event])
+	{
+		return;
+	}
+
+	this.eventListeners[event].unset(callback);
+
+	if (null === this.eventListeners[event])
+	{
+		delete this.eventListeners[event];
+	}
+}          
+
+Collection.prototype.once = function (event, callback) {
+	var once = function () {
+		this.off(event, once);
+		callback.apply(this, arguments);
+	};
+	return this.on(event, once);
+}
 
 Collection.prototype.emit = function (event) {
 	if (undefined === this.eventListeners[event])
@@ -102,27 +132,14 @@ Collection.prototype.emit = function (event) {
 	});
 };
 
-/*
-Exemple d'utilisation que l'on souhaite
-var users = new Collection();
-users.add({
-	'id': 0,
-	'email': 'dupont@gmail.com',
-	'passowrd': 123,
-});
-users.add({
-	'id': 1,
-	'email': 'dupond@gmail.com',
-	'passowrd': 123,
-});
-*/
-
 //////////////////////////////////////////////////////////////////////
 
 function Session()
 {
 	this.data = {};
 }
+
+util.inherits(Session, events.EventEmitter);
 
 Session.prototype.set = function (name, value) {
 	this.data[name] = value;
@@ -137,7 +154,14 @@ Session.prototype.get = function (name, def) {
 	return def;
 };
 
-// @todo session.has(name) which returns whether this entry exists.
+Session.prototype.has = function (name) {
+	return (undefined !== this.data[name]);
+}
+
+
+Session.prototype.close = function () {
+ 	this.emit('close');
+};
 
 //////////////////////////////////////////////////////////////////////
 
@@ -152,7 +176,7 @@ function Response(transport, id)
 
 Response.prototype.sendResult = function (value)
 {
-	this.transport(JSON.stringify({
+	this.transport.send(JSON.stringify({
 		'jsonrpc': '2.0',
 		'result': value,
 		'id': this.id,
@@ -161,7 +185,7 @@ Response.prototype.sendResult = function (value)
 
 Response.prototype.sendError = function (code, message)
 {
-	this.transport(JSON.stringify({
+	this.transport.send(JSON.stringify({
 		'jsonrpc': '2.0',
 		'error': {
 			'code': code,
@@ -175,9 +199,10 @@ Response.prototype.sendError = function (code, message)
 
 var users = new Collection();
 users.add({
-	'id': 0,
+	'id': users_nb_id++,
 	'email': 'dupont@gmail.com',
-	'password': '$2a$10$PsSOXflmnNMEOd0I5ohJQ.cLty0R29koYydD0FBKO9Rb7.jvCelZq'
+	'password': '$2a$10$PsSOXflmnNMEOd0I5ohJQ.cLty0R29koYydD0FBKO9Rb7.jvCelZq',
+	'permission': 'admin',
 });
 
 ///////////////////////////////////////
@@ -193,32 +218,33 @@ api.session = {
 	///////////////////////////////////////
 
 	'signInWithPassword': function (session, req, res)
-	//Authenticates the user for the current session using its name and password.
 	{
 		var p_email = req.params.email;
 		var p_pass = req.params.password;
 
 		if (!p_email || !p_pass)
-		// Verifie si l'email et le mot de passe n'existe pas.
 		{
 			res.sendError(-32602, 'invalid params');
 			return;
 		}
 
-		if (session.get('user_id') !== undefined)
-		// Verifie si l'utilisateur n'est pas déjà enregistrer.
+		if (session.has('user_id'))
 		{
 			res.sendError(0, 'already authenticated');
 			return;
 		}
 
+		console.log('test1')
+
 		var user = users.findWhere({'email': p_email});
+		console.log(user);
 		if (!user)
-		// verifie si l'utilisateur existe dans la base du serveur.
 		{
 			res.sendError(1, 'invalid credential');
 			return;
 		}
+
+		console.log('test2');
 
 		hashy.verify(p_pass, user.password)
 			.then(function (success) {
@@ -228,14 +254,12 @@ api.session = {
 					return;
 				}
 
-				// L'utilisateur peut s'identifier on retourne True.
 				session.set('user_id', user.id);
+				session.set('authentication_method', 'password');
 				res.sendResult(true);
 
 				console.log('the password has been checked, you are now authenticated!');
 
-				// Now we can check if the hash should be recomputed, i.e. if it
-				// fits the current security policies (algorithm & options).
 				if (hashy.needsRehash(user.password))
 				{
 					return hashy.hash(p_pass).then(function (new_hash) {
@@ -245,23 +269,29 @@ api.session = {
 				}
 			})
 			.done();
+
+		var cb = function () {
+			session.close();
+		};
+		users.once('deleteUser:'+ user.id, cb);
+
+		session.on('close', function () {
+			users.off('deleteUser:'+ user.id, cb);
+		});
+
 	},
 
 	///////////////////////////////////////
 
 	'getUser': function (session, req, res)
-	// Returns the authenticated user for this session.
 	{
-		var user_id = session.get('user_id');
-
-		if (user_id === undefined)
-		// Verifie si l'utilisateur n'est pas déjà enregistré.
+		if (!session.has('user_id'))
 		{
 			res.sendError(0, 'not authenticated');
 			return;
 		}
 
-		var user = users.get(user_id);
+		var user = users.get(session.get('user_id'));
 
 		res.sendResult(_.omit(user, 'password'));
 	},
@@ -269,19 +299,16 @@ api.session = {
 	///////////////////////////////////////
 
 	'signInWithToken': function (session, req, res)
-	// Authenticates the user for the current session using a token.
 	{
 		var p_token = req.params.token;
 
 		if (!p_token)
-		// Verifie le token donné en paramètre n'existe pas.
 		{
 			res.sendError(-32602, 'invalid params');
 			return;
 		}
 
-		if (session.get('user_id') !== undefined)
-		// Verifie si l'utilisateur n'est pas déjà enregistré.
+		if (session.has('user_id'))
 		{
 			res.sendError(0, 'already authenticated');
 			return;
@@ -294,59 +321,304 @@ api.session = {
 			return;
 		}
 
-		// L'utilisateur peut s'identifier on retourne True.
 		session.set('user_id', token.user_id);
+		session.set('authentication_method', 'token');
+
+		var cb = function () {
+			session.close();
+		};
+		tokens.once('deleteToken:'+ p_token, cb);
+
+		session.on('close', function () {
+			tokens.off('deleteToken:'+ p_token, cb);
+		});
+
 		res.sendResult(true);
 	},
 
 	///////////////////////////////////////
 
 	'createToken': function (session, req, res)
-	// Creates a token wich may be used to authenticate the user without its password during one week.
 	{
-		var user_id = session.get('user_id');
-
-		if (user_id === undefined)
-		// Vérifie si l'utilisateur n'est pas déjà enregistré.
+		if (!session.has('user_id'))
 		{
 			res.sendError(0, 'not authenticated');
 			return;
 		}
 
-		// @todo Uses the asynchronous version.
-		var token = crypto.randomBytes(32).toString('base64');
+		if ('token' === session.get('authentication_method'))
+		{
+			res.sendError(0, 'Can\'t create token when authenticated with token');
+			return;
+		}
 
-		tokens.add({
-			'id': token,
-			'user_id': user_id,
+		crypto.randomBytes(32, function(ex, value) {
+			var token = value.toString('base64');
+			tokens.add({
+				'id': token,
+				'user_id': session.get('user_id'),
+			});
+			res.sendResult(token);
 		});
 
-		res.sendResult(token);
 	},
 
 	///////////////////////////////////////
 
 	'destroyToken': function (session, req, res)
-	// Destroys the given token, it may no longer be used to open a session.
 	{
 		var p_token = req.params.token;
 
 		if (!tokens.remove(p_token))
-		// Si le token donné n'est pas valide ou qu'il n'existe pas dans la base du serveur.
 		{
 			res.sendError(0, 'invalid token');
 			return;
 		}
 
+		tokens.emit('deleteToken:'+p_token);
 		res.sendResult(true);
 	},
 
 };
 
 ///////////////////////////////////////
+api.user = {
+
+	///////////////////////////////////////
+
+	'create': function (session, req, res)
+	{
+		var p_email = req.params.email;
+		var p_password = req.params.password;
+		var p_permission = req.params.permission;
+
+		var user_id = session.get('user_id');
+
+		if (!session.has('user_id'))
+		{
+			res.sendError(0, 'not authenticated');
+			return;
+		}
+
+		if ('admin' !== users.get(user_id).permission)
+		{
+			res.sendError(3, 'not authorized');
+			return;
+		}
+
+		if (!isEmail(p_email))
+		{
+			res.sendError(1, 'invalid user email');
+			return;
+		}	
+
+		if (!isPassword(p_password))
+		{
+			res.sendError(2, 'invalid user password');
+			return;
+		}
+
+		if (!_.contains(droits, p_permission))
+		{
+			res.sendError(0, 'invalid permission');
+			return;
+		}
+
+		if (undefined !== users.findWhere(p_email))
+		{
+			res.sendError(4, 'user name already taken');
+			return;
+		}
+		hashy.hash(p_password)
+			.then(function (hash) {
+				console.log('generated hash: ', hash);
+
+				res.sendResult(users_nb_id);
+				users.add({
+					'id': users_nb_id++,
+					'email': p_email,
+					'password': hash,
+					'permission': p_permission,
+				});
+
+			})
+			.fail(function (err) {
+				console.error(err);
+			})
+			.done();
+
+	},
+
+	///////////////////////////////////////
+
+	'delete': function (session, req, res)
+	{
+		var p_id = req.params.id
+		var user_id = session.get('user_id');
+
+		if (!session.has('user_id'))
+		{
+			res.sendError(0, 'not authenticated');
+			return;
+		}
+
+		if ('admin' !== users.get(user_id).permission)
+		{
+			res.sendError(0, 'not authorized');	
+			return;
+		}
+
+		if (!users.remove(p_id))
+		{
+			res.sendError(1, 'invalid user');
+			return;
+		}
+
+		users.emit('deleteUser:'+ p_id);
+		res.sendResult(true);
+
+	},
+
+	///////////////////////////////////////
+
+	'changePassword': function (session, req, res)
+	{
+		var p_oldPassword = req.params.old;
+		var p_newPassword = req.params['new'];
+
+		if (!session.has('user_id'))
+		{
+			res.sendError(0, 'not authenticated');
+			return;
+		}
+
+		var user_id = session.get('user_id');
+		var user = users.get(user_id);
+
+		hashy.verify(p_oldPassword, user.password)
+			.then(function (success) {
+				if (!success)
+				{
+					res.sendError(1, 'invalid credential')
+					return;
+				}
+
+				if (!isPassword(p_newPassword))
+				{
+					res.sendError(2, 'invalid password');
+					return;
+				}
+			
+				users.set(user_id, {
+					'password': p_newPassword,
+				});
+
+				res.sendResult(true);
+			})
+		.done();
+	},
+
+	///////////////////////////////////////
+
+	'getAll': function (session, req, res)
+	{
+		var user_id = session.get('user_id');
+
+		if ('admin' !== users.get(user_id).permission)
+		{
+			res.sendError(0, 'not authorized');
+			return;
+		}
+
+		res.sendResult(users.get(user_id));
+	},
+
+	///////////////////////////////////////
+
+	'set': function (session, req, res)
+	{
+		if (!session.has('user_id'))
+		{
+			res.sendError(0, 'not authenticated');
+			return;
+		}
+	
+		var user_id = req.params.id;
+		
+		if (undefined === users.get(user_id))
+		{
+			res.sendError(1, 'invalid user');
+			return;
+		}
+
+		if (_.isUndefined(_.omit(req.params, ['id','email','password','permission'])))
+		{
+			res.sendError(2, 'invalid property');
+			return;
+		}
+
+		var user = users.get(user_id);
+		var p_email = user.email;
+		var p_password = user.password;
+		var p_permission = user.permission;
+
+
+		if (undefined !== req.params.email)
+		{
+			p_email = req.params.email;
+		}
+
+		if (undefined !== req.params.password)
+		{
+			hashy.hash(req.params.password)
+			.then(function (hash) {
+				console.log('generated hash: ', hash);
+
+				p_password = hash;
+
+				if (undefined !== req.params.permission)
+				{
+					p_permission = req.params.permission;
+				}
+
+				if (!isEmail(p_email))
+				{
+					res.sendError(1, 'invalid user email');
+					return;
+				}	
+
+				if (isPassword(p_password))
+				{
+					res.sendError(2, 'invalid user password');
+					return;
+				}
+
+				if (!_.contains(droits, p_permission))
+				{
+					res.sendError(0, 'invalid permission');
+					return;
+				}
+
+				users.set(user_id, {
+							'email': p_email,
+							'password': p_password,
+							'permission': p_permission,
+						});
+
+				res.sendResult(true);
+			})
+			.fail(function (err) {
+				console.error(err);
+			})
+			.done();
+
+		}
+	},
+};
+
 
 function api_resolve(name)
-// Verifie si la fonction appelé existe et retourne cette fonction ou retourne undefined.
+
 {
 	var parts = name.split('.');
 
@@ -375,15 +647,20 @@ function api_resolve(name)
 io.sockets.on('connection', function (socket) {
 
 	var session = new Session();
+	
+	session.on('close', function () {
+		socket.disconnect();
+	});
 
-	var transport = function (data) {
-		console.log(data);
-		socket.send(data);
+	var transport = {
+		'send': function (data) {
+			console.log(data);
+			socket.send(data);
+		},
 	};
 
 	socket.on('message', function (message) {
 		console.log(message);
-		// Test si l'on reçoit du JSON.
 		try
 		{
 			message = JSON.parse(message.toString());
@@ -394,7 +671,6 @@ io.sockets.on('connection', function (socket) {
 			return;
 		}
 
-		// Test si l'on reçoit pas du JSON-RPC.
 		if (message.jsonrpc !== '2.0' || !message.method || !message.params || message.id === undefined)
 		{
 			new Response(transport, null).sendError(-32600, 'The JSON sent is not a valid request object');
@@ -411,11 +687,11 @@ io.sockets.on('connection', function (socket) {
 		console.log(current);
 		if (!current)
 		{
-			// Si la fonction appelé n'existe pas.
 			res.sendError(-32601, 'No such method');
 			return;
 		}
 
 		current(session, req, res);
+
 	});
 });
