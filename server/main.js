@@ -1,13 +1,12 @@
 #!/usr/bin/nodejs
 
-var io = require('socket.io').listen(8080);
+var io = require('socket.io').listen(8080, {'log level': 0});
 var _ = require('underscore');
 var crypto = require('crypto');
 var hashy = require('hashy');
 var events = require('events');
 var util = require("util");
 
-io.set('log level', 0);
 var users_nb_id = 0;
 
 Array.prototype.unset = function(val) {
@@ -156,7 +155,7 @@ Session.prototype.get = function (name, def) {
 
 Session.prototype.has = function (name) {
 	return (undefined !== this.data[name]);
-}
+};
 
 
 Session.prototype.close = function () {
@@ -234,17 +233,12 @@ api.session = {
 			return;
 		}
 
-		console.log('test1')
-
 		var user = users.findWhere({'email': p_email});
-		console.log(user);
 		if (!user)
 		{
 			res.sendError(1, 'invalid credential');
 			return;
 		}
-
-		console.log('test2');
 
 		hashy.verify(p_pass, user.password)
 			.then(function (success) {
@@ -285,13 +279,15 @@ api.session = {
 
 	'getUser': function (session, req, res)
 	{
-		if (!session.has('user_id'))
+		var user_id = session.get('user_id');
+
+		if (undefined === user_id)
 		{
 			res.sendError(0, 'not authenticated');
 			return;
 		}
 
-		var user = users.get(session.get('user_id'));
+		var user = users.get(user_id);
 
 		res.sendResult(_.omit(user, 'password'));
 	},
@@ -340,7 +336,9 @@ api.session = {
 
 	'createToken': function (session, req, res)
 	{
-		if (!session.has('user_id'))
+		var user_id = session.get('user_id');
+
+		if (undefined === user_id)
 		{
 			res.sendError(0, 'not authenticated');
 			return;
@@ -356,11 +354,10 @@ api.session = {
 			var token = value.toString('base64');
 			tokens.add({
 				'id': token,
-				'user_id': session.get('user_id'),
+				'user_id': user_id,
 			});
 			res.sendResult(token);
 		});
-
 	},
 
 	///////////////////////////////////////
@@ -618,7 +615,6 @@ api.user = {
 
 
 function api_resolve(name)
-
 {
 	var parts = name.split('.');
 
@@ -692,6 +688,5 @@ io.sockets.on('connection', function (socket) {
 		}
 
 		current(session, req, res);
-
 	});
 });
