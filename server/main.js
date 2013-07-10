@@ -1,5 +1,7 @@
 #!/usr/bin/nodejs
 
+/*jshint es5:true */
+
 var io = require('socket.io').listen(8080, {'log level': 0});
 var _ = require('underscore');
 var crypto = require('crypto');
@@ -13,9 +15,10 @@ var xmlrpc = require('xmlrpc');
 var users_nb_id = 0;
 
 Array.prototype.unset = function(val) {
-	var index = this.indexOf(val)
-	if(index > -1){
-		this.splice(index,1)
+	var index = this.indexOf(val);
+	if(index > -1)
+	{
+		this.splice(index, 1);
 	}
 };
 
@@ -112,7 +115,7 @@ Collection.prototype.off = function (event, callback) {
 	{
 		delete this.eventListeners[event];
 	}
-}          
+}
 
 Collection.prototype.once = function (event, callback) {
 	var once = function () {
@@ -249,7 +252,7 @@ api.session = {
 			.then(function (success) {
 				if (!success)
 				{
-					res.sendError(1, 'invalid credential')
+					res.sendError(1, 'invalid credential');
 					return;
 				}
 
@@ -412,7 +415,7 @@ api.user = {
 		{
 			res.sendError(1, 'invalid user email');
 			return;
-		}	
+		}
 
 		if (!isPassword(p_password))
 		{
@@ -455,7 +458,7 @@ api.user = {
 
 	'delete': function (session, req, res)
 	{
-		var p_id = req.params.id
+		var p_id = req.params.id;
 		var user_id = session.get('user_id');
 
 		if (!session.has('user_id'))
@@ -466,7 +469,7 @@ api.user = {
 
 		if ('admin' !== users.get(user_id).permission)
 		{
-			res.sendError(0, 'not authorized');	
+			res.sendError(0, 'not authorized');
 			return;
 		}
 
@@ -501,7 +504,7 @@ api.user = {
 			.then(function (success) {
 				if (!success)
 				{
-					res.sendError(1, 'invalid credential')
+					res.sendError(1, 'invalid credential');
 					return;
 				}
 
@@ -510,7 +513,7 @@ api.user = {
 					res.sendError(2, 'invalid password');
 					return;
 				}
-			
+
 				users.set(user_id, {
 					'password': p_newPassword,
 				});
@@ -544,9 +547,9 @@ api.user = {
 			res.sendError(0, 'not authenticated');
 			return;
 		}
-	
+
 		var user_id = req.params.id;
-		
+
 		if (undefined === users.get(user_id))
 		{
 			res.sendError(1, 'invalid user');
@@ -587,7 +590,7 @@ api.user = {
 				{
 					res.sendError(1, 'invalid user email');
 					return;
-				}	
+				}
 
 				if (isPassword(p_password))
 				{
@@ -653,7 +656,7 @@ function Xapi(host, session)
 	this.session = session;
 }
 
-Xapi.prototype.call_ = function(method, callback)
+Xapi.prototype.call = function(method, /* args..., */ callback)
 {
 	var params = [];
 
@@ -710,21 +713,21 @@ io.sockets.on('connection', function (socket) {
 
 	Xapi.open('192.168.1.116', 'root', 'qwerty', function(xapi) {
 
-	var wait_and_log_event = function() {
+		var wait_and_log_event = function() {
+			//
+			xapi.call_('event.next', function(event) {
+				console.log(event);
+
+				wait_and_log_event();
+			});
+		}
+
 		//
-		xapi.call_('event.next', function(event) {
-			console.log(event);
-
-			wait_and_log_event();
-		});
-	}
-
-	//
-	xapi.call_('event.register', ['*'], wait_and_log_event);
+		xapi.call('event.register', ['*'], wait_and_log_event);
 	});
 
 	var session = new Session();
-	
+
 	session.on('close', function () {
 		socket.disconnect();
 	});
